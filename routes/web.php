@@ -74,6 +74,8 @@ Route::middleware(['auth', 'role:b2c'])->group(function () {
 
     Route::post('/customer/broadcast/mark-all', [CustomerController::class, 'markAllBroadcastsRead'])->name('customer.broadcast.mark-all-read');
     Route::post('/customer/broadcast/{id}/read', [CustomerController::class, 'markSingleBroadcastRead'])->name('customer.broadcast.read');
+    Route::get('/customer/profile', [CustomerController::class, 'profile'])->name('customer.profile');
+    Route::put('/customer/profile/update', [CustomerController::class, 'updateProfile'])->name('customer.profile.update');
 });
 
 require __DIR__.'/auth.php';

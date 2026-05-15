@@ -187,11 +187,6 @@ class CustomerController extends Controller
         return view('customer.transactions', compact('transactions'));
     }
 
-    public function profile()
-    {
-        return view('customer.profile');
-    }
-
     public function aiChat()
     {
         return view('customer.ai-chat');
@@ -225,5 +220,26 @@ class CustomerController extends Controller
         $broadcast->update(['is_read' => true]);
         
         return back()->with('success', 'Pesan telah dibaca.');
+    }
+    public function profile()
+    {
+        return view('customer.profile');
+    }
+
+    public function updateProfile(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'address' => 'nullable|string'
+        ]);
+
+        $user = \App\Models\User::find(Auth::id());
+        $user->name = $request->name;
+        $user->phone = $request->phone;
+        $user->address = $request->address;
+        $user->save();
+
+        return back()->with('success', 'Profil dan alamat berhasil diperbarui!');
     }
 }
