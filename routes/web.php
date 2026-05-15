@@ -69,6 +69,11 @@ Route::middleware(['auth', 'role:b2c'])->group(function () {
     Route::get('/customer/broadcast', [CustomerController::class, 'broadcast'])->name('customer.broadcast');
     Route::get('/customer/ai-chat', [CustomerController::class, 'aiChat'])->name('customer.ai-chat');
     Route::get('/customer/profile', [CustomerController::class, 'profile'])->name('customer.profile');
+
+    Route::post('/customer/broadcast/mark-read', [CustomerController::class, 'markAllBroadcastsRead'])->name('customer.broadcast.mark-read');
+
+    Route::post('/customer/broadcast/mark-all', [CustomerController::class, 'markAllBroadcastsRead'])->name('customer.broadcast.mark-all-read');
+    Route::post('/customer/broadcast/{id}/read', [CustomerController::class, 'markSingleBroadcastRead'])->name('customer.broadcast.read');
 });
 
 require __DIR__.'/auth.php';

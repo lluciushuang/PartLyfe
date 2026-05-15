@@ -6,81 +6,112 @@
     <title>Kabar Admin | Partlyfe</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #020617; color: white; overflow-x: hidden; }
+        .glass-panel { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255, 255, 255, 0.05); transform: translateZ(0); will-change: transform, backdrop-filter; }
+        .glass-card { background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @keyframes blob {
+            0% { transform: translate3d(0px, 0px, 0px) scale(1); }
+            33% { transform: translate3d(30px, -50px, 0px) scale(1.1); }
+            66% { transform: translate3d(-20px, 20px, 0px) scale(0.9); }
+            100% { transform: translate3d(0px, 0px, 0px) scale(1); }
+        }
+        .animate-blob { animation: blob 15s infinite ease-in-out; will-change: transform; backface-visibility: hidden; }
+    </style>
 </head>
-<body class="bg-slate-50 font-sans text-slate-800 h-screen overflow-hidden flex">
+<body class="bg-[#020617] font-sans text-slate-200 h-screen overflow-hidden flex selection:bg-indigo-500 selection:text-white">
 
-    <!-- SIDEBAR NAVIGASI UTAMA -->
-    <aside class="w-72 bg-slate-900 text-slate-300 flex flex-col h-full shadow-2xl z-20 flex-shrink-0">
-        <div class="h-20 flex items-center px-8 border-b border-slate-800 bg-slate-950">
-            <a href="{{ route('customer.dashboard') }}" class="text-3xl font-black text-white tracking-tighter">PARTLYFE<span class="text-amber-500">.</span></a>
-        </div>
+    @include('layouts.sidebar')
 
-        <div class="flex-1 overflow-y-auto py-6 px-4 space-y-1 scrollbar-hide">
-            <p class="px-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-4">Menu Utama</p>
-            <a href="{{ route('customer.dashboard') }}" class="flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-slate-800 hover:text-white transition-colors font-semibold"><i class="fa-solid fa-store w-5 text-center text-lg"></i> Katalog Produk</a>
+    <div class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        
+        <div class="absolute top-20 right-20 w-[400px] h-[400px] bg-indigo-600/20 rounded-full filter blur-[120px] animate-blob pointer-events-none z-0"></div>
+        <div class="absolute bottom-10 left-10 w-[300px] h-[300px] bg-purple-600/20 rounded-full filter blur-[120px] animate-blob animation-delay-2000 pointer-events-none z-0"></div>
 
-            <div class="group cursor-pointer">
-                <a href="{{ route('customer.transactions') }}" class="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-slate-800 hover:text-white transition-colors font-semibold">
-                    <div class="flex items-center gap-4"><i class="fa-solid fa-receipt w-5 text-center text-lg"></i> Transaksi Saya</div>
-                    <i class="fa-solid fa-chevron-down text-xs transition-transform group-hover:rotate-180"></i>
+        <header class="h-20 glass-panel flex items-center justify-between px-8 flex-shrink-0 z-50 sticky top-0 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]">
+            <h2 class="text-xl font-black text-white flex items-center gap-3">
+                <i class="fa-solid fa-tower-broadcast text-indigo-400"></i> Pusat Kabar & Notifikasi
+            </h2>
+            
+            <div class="flex items-center gap-6 ml-8">
+                <a href="{{ Auth::check() ? route('customer.wishlist') : route('login') }}" class="relative text-slate-400 hover:text-rose-400 transition cursor-pointer">
+                    <i class="fa-solid fa-heart text-2xl"></i>
                 </a>
-            </div>
-
-            <!-- AKTIF DI MENU INI -->
-            <a href="{{ route('customer.broadcast') }}" class="flex items-center justify-between px-4 py-3 rounded-xl font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                <div class="flex items-center gap-4"><i class="fa-solid fa-tower-broadcast w-5 text-center text-lg"></i> Kabar Admin</div>
-            </a>
-
-            <a href="{{ route('customer.ai-chat') }}" class="flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-slate-800 hover:text-white transition-colors font-semibold border border-transparent hover:border-slate-700 mt-2 relative overflow-hidden group">
-                <i class="fa-solid fa-robot w-5 text-center text-lg text-indigo-400"></i><span class="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">Tanya Mekanik AI</span>
-            </a>
-
-            <p class="px-4 text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-8">Pengaturan</p>
-            <a href="{{ route('customer.profile') }}" class="flex items-center gap-4 px-4 py-3 rounded-xl hover:bg-slate-800 hover:text-white transition-colors font-semibold"><i class="fa-solid fa-user-gear w-5 text-center text-lg"></i> Profil & Alamat</a>
-        </div>
-    </aside>
-
-    <!-- AREA KONTEN UTAMA -->
-    <div class="flex-1 flex flex-col h-screen overflow-hidden bg-slate-50 relative">
-        <header class="h-20 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between px-8 flex-shrink-0 z-10">
-            <h2 class="text-xl font-bold text-slate-800">Pusat Informasi</h2>
-            <div class="flex items-center gap-6">
-                <a href="{{ route('customer.wishlist') }}" class="relative text-slate-400 hover:text-rose-500 transition cursor-pointer"><i class="fa-solid fa-heart text-2xl"></i></a>
-                <a href="{{ route('customer.cart') }}" class="relative text-slate-400 hover:text-amber-500 transition cursor-pointer"><i class="fa-solid fa-cart-shopping text-2xl"></i></a>
+                <a href="{{ Auth::check() ? route('customer.cart') : route('login') }}" class="relative text-slate-400 hover:text-amber-400 transition cursor-pointer">
+                    <i class="fa-solid fa-cart-shopping text-2xl"></i>
+                </a>
             </div>
         </header>
 
-        <main class="flex-1 overflow-y-auto p-8 scrollbar-hide max-w-4xl mx-auto w-full">
-            <div class="mb-8">
-                <h1 class="text-3xl font-black text-slate-900">Kabar Admin</h1>
-                <p class="text-slate-500 mt-1">Pengumuman terbaru seputar stok, promo, dan info toko Sinar Jaya Motor.</p>
+        <main class="flex-1 overflow-y-auto p-8 scrollbar-hide relative z-10 w-full max-w-[900px] mx-auto">
+            
+            <div class="flex items-center justify-between mb-8 pb-6 border-b border-white/10">
+                <div>
+                    <h1 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">Pesan dari Admin</h1>
+                    <p class="text-slate-400 mt-2 text-sm">Informasi terbaru seputar promo, pesanan, dan pembaruan sistem Partlyfe.</p>
+                </div>
+                
+                @if($broadcasts->where('is_read', false)->count() > 0)
+                    <form action="{{ route('customer.broadcast.mark-all-read') }}" method="POST">
+                        @csrf
+                        <button type="submit" class="text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/30 px-4 py-2 rounded-lg hover:bg-indigo-500 hover:text-white transition-colors flex items-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.2)]">
+                            <i class="fa-solid fa-check-double"></i> Tandai Semua Dibaca
+                        </button>
+                    </form>
+                @endif
             </div>
 
-            <div class="space-y-6">
-                <!-- Card Notifikasi 1 -->
-                <div class="bg-white p-6 rounded-2xl border border-amber-200 shadow-sm flex gap-6 relative overflow-hidden">
-                    <div class="absolute top-0 left-0 w-1.5 h-full bg-amber-500"></div>
-                    <div class="w-12 h-12 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center text-xl flex-shrink-0"><i class="fa-solid fa-bullhorn"></i></div>
-                    <div>
-                        <div class="flex items-center gap-3 mb-1">
-                            <h3 class="font-bold text-lg text-slate-900">Promo Oli Motul Akhir Bulan!</h3>
-                            <span class="bg-rose-100 text-rose-600 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">Baru</span>
-                        </div>
-                        <p class="text-xs text-slate-400 mb-3"><i class="fa-regular fa-clock"></i> Hari ini, 09:00 WIB</p>
-                        <p class="text-slate-600 text-sm leading-relaxed">Dapatkan diskon hingga 15% untuk setiap pembelian Oli Mesin Motul all varian. Berlaku kelipatan, jangan sampai kehabisan stok ya bosku!</p>
-                    </div>
-                </div>
+            <div class="space-y-4">
+                @forelse($broadcasts as $bc)
+                    @php
+                        if($bc->type == 'promo') {
+                            $color = 'amber'; $icon = 'fa-bullhorn'; $label = 'Promo Spesial';
+                        } elseif($bc->type == 'system') {
+                            $color = 'indigo'; $icon = 'fa-robot'; $label = 'Update Sistem';
+                        } else {
+                            $color = 'slate'; $icon = 'fa-circle-info'; $label = 'Informasi Umum';
+                        }
+                    @endphp
 
-                <!-- Card Notifikasi 2 -->
-                <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex gap-6 relative overflow-hidden">
-                    <div class="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
-                    <div class="w-12 h-12 bg-indigo-100 text-indigo-500 rounded-full flex items-center justify-center text-xl flex-shrink-0"><i class="fa-solid fa-robot"></i></div>
-                    <div>
-                        <h3 class="font-bold text-lg text-slate-900 mb-1">Fitur Mekanik AI Kini Tersedia</h3>
-                        <p class="text-xs text-slate-400 mb-3"><i class="fa-regular fa-clock"></i> 2 hari yang lalu</p>
-                        <p class="text-slate-600 text-sm leading-relaxed">Bingung kampas rem mana yang cocok untuk motormu? Sekarang kamu bisa langsung tanya ke Chatbot AI kita yang siap membantu 24/7. Cobain sekarang di menu samping!</p>
+                    <div @if(!$bc->is_read) onclick="document.getElementById('read-form-{{$bc->id}}').submit();" @endif 
+                         class="glass-card rounded-2xl p-6 flex gap-6 items-start relative group transition-all duration-300 {{ !$bc->is_read ? 'hover:border-'.$color.'-500/50 hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] cursor-pointer' : 'opacity-60 grayscale-[30%]' }} overflow-hidden">
+                        
+                        @if(!$bc->is_read)
+                            <form id="read-form-{{$bc->id}}" action="{{ route('customer.broadcast.read', $bc->id) }}" method="POST" class="hidden">
+                                @csrf
+                            </form>
+                            
+                            <div class="absolute left-0 top-0 bottom-0 w-1 bg-{{$color}}-500 shadow-[0_0_10px_currentColor]"></div>
+                        @endif
+                        
+                        <div class="w-14 h-14 bg-{{$color}}-500/10 border border-{{$color}}-500/20 text-{{$color}}-400 rounded-xl flex items-center justify-center flex-shrink-0 {{ !$bc->is_read ? 'group-hover:scale-110' : '' }} transition-transform">
+                            <i class="fa-solid {{ $icon }} text-2xl"></i>
+                        </div>
+                        
+                        <div class="flex-grow">
+                            <div class="flex justify-between items-start mb-1">
+                                <h3 class="text-lg font-bold {{ $bc->is_read ? 'text-slate-400' : 'text-white' }} {{ !$bc->is_read ? 'group-hover:text-'.$color.'-400' : '' }} transition-colors">{{ $bc->title }}</h3>
+                                <span class="text-xs text-slate-500 font-medium">{{ $bc->created_at->diffForHumans() }}</span>
+                            </div>
+                            <p class="text-slate-400 text-sm leading-relaxed mb-3">{{ $bc->message }}</p>
+                            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                <i class="fa-solid fa-tag"></i> {{ $label }}
+                            </span>
+                        </div>
+                        
+                        @if(!$bc->is_read)
+                            <div class="absolute top-6 right-6 w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_10px_rgba(225,29,72,0.8)] animate-pulse"></div>
+                        @endif
                     </div>
-                </div>
+                @empty
+                    <div class="text-center py-20">
+                        <i class="fa-solid fa-envelope-open text-6xl text-slate-700 mb-4"></i>
+                        <h2 class="text-xl font-bold text-slate-300">Belum Ada Pesan</h2>
+                        <p class="text-slate-500">Kotak masukmu masih kosong bersih.</p>
+                    </div>
+                @endforelse
             </div>
         </main>
     </div>

@@ -8,7 +8,8 @@ use App\Models\Category;
 use App\Models\ProductPrice;
 use App\Models\Cart;
 use App\Models\Wishlist;
-use App\Models\Transaction; // Tambahan untuk memanggil relasi transaksi
+use App\Models\Transaction;
+use App\Models\Broadcast; // Jangan lupa panggil model Broadcast
 use Illuminate\Support\Facades\Auth;
 
 class CustomerController extends Controller
@@ -191,13 +192,38 @@ class CustomerController extends Controller
         return view('customer.profile');
     }
 
-    public function broadcast()
-    {
-        return view('customer.broadcast');
-    }
-
     public function aiChat()
     {
         return view('customer.ai-chat');
+    }
+
+    // ==========================================================
+    // 5. AREA KABAR ADMIN (BROADCAST)
+    // ==========================================================
+
+    public function broadcast()
+    {
+        // Ambil pesan dari DB, yang terbaru di atas
+        $broadcasts = Broadcast::where('user_id', Auth::id())->latest()->get();
+        return view('customer.broadcast', compact('broadcasts'));
+    }
+
+    // Fungsi canggih untuk mengubah status SEMUA pesan menjadi "Terbaca"
+    public function markAllBroadcastsRead()
+    {
+        Broadcast::where('user_id', Auth::id())
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
+
+        return back()->with('success', 'Semua notifikasi telah ditandai dibaca.');
+    }
+
+    // Fungsi untuk menandai SATU pesan menjadi terbaca saat diklik
+    public function markSingleBroadcastRead($id)
+    {
+        $broadcast = Broadcast::where('user_id', Auth::id())->findOrFail($id);
+        $broadcast->update(['is_read' => true]);
+        
+        return back()->with('success', 'Pesan telah dibaca.');
     }
 }
