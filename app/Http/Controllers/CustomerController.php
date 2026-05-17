@@ -9,8 +9,10 @@ use App\Models\ProductPrice;
 use App\Models\Cart;
 use App\Models\Wishlist;
 use App\Models\Transaction;
-use App\Models\Broadcast; // Jangan lupa panggil model Broadcast
+use App\Models\Broadcast; 
 use Illuminate\Support\Facades\Auth;
+use Midtrans\Config;
+use Midtrans\Snap;
 
 
 class CustomerController extends Controller
@@ -97,50 +99,51 @@ class CustomerController extends Controller
         return view('customer.cart', compact('cartItems'));
     }
 
+  // ==========================================
+    // 1. FUNGSI TAMBAH KE KERANJANG
+    // ==========================================
     public function addToCart(Request $request, $product_id)
     {
-        $product = Product::findOrFail($product_id);
+        $product = \App\Models\Product::find($product_id);
         
-        // Validasi Stok Kosong
-        if ($product->current_stock <= 0) {
-            return back()->with('error', 'Maaf, barang sedang habis dan tidak bisa dimasukkan ke keranjang.');
+        if (!$product) {
+            return back()->with('error', 'Produk tidak ditemukan.');
         }
 
-        $qty = $request->input('qty', 1);
-        $cart = Cart::where('user_id', Auth::id())->where('product_id', $product_id)->first();
+        $requestedQty = $request->input('qty', 1);
 
-        if ($cart) {
-            if (($cart->qty + $qty) > $product->current_stock) {
-                return back()->with('error', 'Gagal: Jumlah total melebihi sisa stok yang ada!');
-            }
-            $cart->qty += $qty;
-            $cart->save();
+        // GEMBOK KETAT 1: Cek stok asli produk
+        if ($product->current_stock <= 0) {
+            return back()->with('error', "Maaf bos, stok {$product->name} sedang habis total! Tidak bisa dimasukkan ke keranjang.");
+        }
+
+        // Cek apakah barang sudah ada di keranjang user
+        $cartItem = \App\Models\Cart::where('user_id', \Illuminate\Support\Facades\Auth::id())
+                                    ->where('product_id', $product_id)
+                                    ->first();
+
+        // Jika sudah ada di keranjang, cek apakah total tambahannya melebihi sisa stok
+        $existingQty = $cartItem ? $cartItem->qty : 0;
+        $newTotalQty = $existingQty + $requestedQty;
+
+        if ($newTotalQty > $product->current_stock) {
+            return back()->with('error', "Stok {$product->name} terbatas. Anda sudah punya {$existingQty} di keranjang, dan sisa stok hanya {$product->current_stock} pcs.");
+        }
+
+        // Jika semua lolos, simpan ke keranjang
+        if ($cartItem) {
+            $cartItem->qty += $requestedQty;
+            $cartItem->save();
         } else {
-            if ($qty > $product->current_stock) {
-                return back()->with('error', 'Gagal: Jumlah yang diminta melebihi sisa stok!');
-            }
-            Cart::create([
-                'user_id' => Auth::id(),
+            \App\Models\Cart::create([
+                'user_id' => \Illuminate\Support\Facades\Auth::id(),
                 'product_id' => $product_id,
-                'qty' => $qty
+                'qty' => $requestedQty
             ]);
         }
 
-        return back()->with('success', 'Barang berhasil masuk keranjang!');
+        return back()->with('success', 'Berhasil ditambahkan ke keranjang Partlyfe!');
     }
-
-    public function updateCart(Request $request, $id)
-    {
-        $cart = Cart::where('user_id', Auth::id())->findOrFail($id);
-        
-        $qty = $request->qty;
-        if($qty > 0 && $qty <= $cart->product->current_stock) {
-            $cart->update(['qty' => $qty]);
-        }
-        
-        return back()->with('success', 'Jumlah barang diperbarui.');
-    }
-
     public function removeFromCart($id)
     {
         Cart::where('user_id', Auth::id())->where('id', $id)->delete();
@@ -300,4 +303,244 @@ class CustomerController extends Controller
             ]);
         }
     }
+
+    public function checkout()
+    {
+        // 1. Setup Konfigurasi Midtrans
+        Config::$serverKey = config('midtrans.server_key');
+        Config::$isProduction = config('midtrans.is_production');
+        Config::$isSanitized = config('midtrans.is_sanitized');
+        Config::$is3ds = config('midtrans.is_3ds');
+
+        // 2. Simulasi Data Pesanan (Nanti bisa disesuaikan dengan data Keranjang/Cart asli di DB kamu)
+        $orderId = 'TRX-' . time(); // Contoh: TRX-1715856742
+        $grossAmount = 150000;      // Contoh Total Belanja Rp 150.000
+
+        // 3. Buat Payload untuk dikirim ke Midtrans
+        $params = [
+            'transaction_details' => [
+                'order_id' => $orderId,
+                'gross_amount' => $grossAmount,
+            ],
+            'customer_details' => [
+                'first_name' => \Illuminate\Support\Facades\Auth::user()->name,
+                'email' => \Illuminate\Support\Facades\Auth::user()->email,
+                'phone' => \Illuminate\Support\Facades\Auth::user()->phone ?? '08111222333',
+            ],
+        ];
+
+        // 4. Dapatkan Snap Token
+        try {
+            $snapToken = Snap::getSnapToken($params);
+            
+            // Tampilkan halaman checkout beserta tokennya
+            return view('customer.checkout', [
+                'snapToken' => $snapToken,
+                'orderId' => $orderId,
+                'grossAmount' => $grossAmount
+            ]);
+        } catch (\Exception $e) {
+            return back()->with('error', 'Gagal memproses pembayaran: ' . $e->getMessage());
+        }
+    }
+
+    public function initiatePayment(Request $request)
+    {
+        // Inisialisasi Konfigurasi Midtrans
+        \Midtrans\Config::$serverKey = config('midtrans.server_key');
+        \Midtrans\Config::$isProduction = config('midtrans.is_production');
+        \Midtrans\Config::$isSanitized = config('midtrans.is_sanitized');
+        \Midtrans\Config::$is3ds = config('midtrans.is_3ds');
+
+        $orderId = 'TRX-' . time() . '-' . \Illuminate\Support\Facades\Auth::id();
+        $grossAmount = 0;
+        $itemDetails = [];
+        $dbDetails = []; 
+
+        if ($request->has('product_id')) {
+            // PERBAIKAN: Pakai "find" biasa, BUKAN paginate()
+            $product = \App\Models\Product::with('prices')->find($request->product_id);
+            
+            if (!$product) return response()->json(['status' => 'error', 'message' => 'Produk tidak ditemukan.'], 404);
+            
+            $qty = $request->input('qty', 1);
+
+            // GEMBOK KETAT 2: Cek stok saat Beli Langsung
+            if ($product->current_stock < $qty) {
+                return response()->json([
+                    'status' => 'error', 
+                    'message' => "Gagal! Stok {$product->name} tidak cukup. Sisa stok: {$product->current_stock} pcs."
+                ], 400);
+            }
+            
+            $retailPriceObj = $product->prices->where('price_level', 1)->first();
+            $price = $retailPriceObj ? $retailPriceObj->price : 0;
+            if ($price <= 0) return response()->json(['status' => 'error', 'message' => 'Harga produk belum diatur.'], 400);
+            
+            $itemDetails[] = [
+                'id' => $product->id,
+                'price' => (int)$price,
+                'quantity' => (int)$qty,
+                'name' => substr($product->name, 0, 50),
+            ];
+
+            // Siapkan data untuk tabel transaction_details
+            $dbDetails[] = [
+                'product_id' => $product->id,
+                'qty' => $qty,
+                'price' => $price,
+            ];
+        } else {
+            $cartItems = \App\Models\Cart::where('user_id', \Illuminate\Support\Facades\Auth::id())
+                            ->with(['product', 'product.prices'])->get();
+            
+            if ($cartItems->isEmpty()) return response()->json(['status' => 'error', 'message' => 'Keranjang kosong.'], 400);
+
+            foreach ($cartItems as $item) {
+                // GEMBOK KETAT 3: Cek stok untuk setiap barang di keranjang sebelum checkout
+                if ($item->product->current_stock < $item->qty) {
+                    return response()->json([
+                        'status' => 'error', 
+                        'message' => "Stok {$item->product->name} tidak cukup untuk pesanan Anda. Sisa stok: {$item->product->current_stock} pcs."
+                    ], 400);
+                }
+
+                $retailPriceObj = $item->product->prices->where('price_level', 1)->first();
+                $price = $retailPriceObj ? $retailPriceObj->price : 0;
+
+                if ($price > 0) {
+                    $itemDetails[] = [
+                        'id' => $item->product->id,
+                        'price' => (int)$price,
+                        'quantity' => (int)$item->qty,
+                        'name' => substr($item->product->name, 0, 50),
+                    ];
+                    
+                    // Siapkan data untuk tabel transaction_details
+                    $dbDetails[] = [
+                        'product_id' => $item->product->id,
+                        'qty' => $item->qty,
+                        'price' => $price,
+                    ];
+                }
+            }
+        }
+
+        foreach ($itemDetails as $detail) {
+            $grossAmount += ($detail['price'] * $detail['quantity']);
+        }
+
+        if ($grossAmount <= 0) return response()->json(['status' => 'error', 'message' => 'Total tagihan Rp 0.'], 400);
+
+        $params = [
+            'transaction_details' => [
+                'order_id' => $orderId,
+                'gross_amount' => (int)$grossAmount,
+            ],
+            'item_details' => $itemDetails,
+            'customer_details' => [
+                'first_name' => \Illuminate\Support\Facades\Auth::user()->name,
+                'email' => \Illuminate\Support\Facades\Auth::user()->email,
+                'phone' => \Illuminate\Support\Facades\Auth::user()->phone ?? '08123456789',
+            ],
+        ];
+
+        // PROSES SIMPAN KE DATABASE (MENGGUNAKAN DB TRANSACTION)
+        \Illuminate\Support\Facades\DB::beginTransaction();
+        try {
+            // A. Simpan ke tabel transactions
+            $transaction = \App\Models\Transaction::create([
+                'user_id' => \Illuminate\Support\Facades\Auth::id(),
+                'invoice_number' => $orderId,
+                'total_amount' => $grossAmount,
+                'status' => 'pending', 
+            ]);
+
+            // B. Simpan ke tabel transaction_details
+            foreach ($dbDetails as $detail) {
+                \App\Models\TransactionDetail::create([
+                    'transaction_id' => $transaction->id,
+                    'product_id' => $detail['product_id'],
+                    'qty' => $detail['qty'],
+                    'price' => $detail['price'],
+                ]);
+            }
+
+            // C. Kosongkan keranjang jika checkout berasal dari halaman Keranjang
+            if (!$request->has('product_id')) {
+                \App\Models\Cart::where('user_id', \Illuminate\Support\Facades\Auth::id())->delete();
+            }
+
+            // D. Minta Token Midtrans
+            $snapToken = \Midtrans\Snap::getSnapToken($params);
+            
+            // Jika semua aman, Permanenkan data di Database
+            \Illuminate\Support\Facades\DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'snap_token' => $snapToken
+            ]);
+
+        } catch (\Exception $e) {
+            // Jika gagal buat token atau gagal simpan DB, batalkan semua insert data
+            \Illuminate\Support\Facades\DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Gagal memproses transaksi: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+   // ==========================================
+    // 3. FUNGSI UNTUK MENGUBAH STATUS & POTONG STOK
+    // ==========================================
+    public function updatePaymentStatus(Request $request)
+    {
+        $orderId = $request->input('order_id');
+        $status = $request->input('transaction_status'); 
+
+        $transaction = \App\Models\Transaction::where('invoice_number', $orderId)->with('details.product')->first();
+        
+        if ($transaction && $transaction->status == 'pending') {
+            
+            if ($status == 'settlement' || $status == 'capture') {
+                \Illuminate\Support\Facades\DB::beginTransaction();
+                try {
+                    // 1. Ubah Status
+                    $transaction->status = 'processing';
+                    $transaction->save();
+
+                    // 2. Potong Stok Fisik Produk
+                    foreach ($transaction->details as $detail) {
+                        $product = $detail->product;
+                        // Pastikan stok tidak minus (walau sudah di-lock sebelumnya)
+                        $product->current_stock = max(0, $product->current_stock - $detail->qty);
+                        $product->save();
+                    }
+                    
+                    \Illuminate\Support\Facades\DB::commit();
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\DB::rollBack();
+                    // Log error jika perlu
+                }
+            }
+        }
+
+        return response()->json(['status' => 'success']);
+    }
+    
+ 
+    public function invoice($invoice_number)
+    {
+        // Cari transaksi berdasarkan nomor invoice dan pastikan milik user yang sedang login
+        $transaction = \App\Models\Transaction::where('invoice_number', $invoice_number)
+            ->where('user_id', \Illuminate\Support\Facades\Auth::id())
+            ->with(['details.product'])
+            ->firstOrFail();
+
+        return view('customer.invoice', compact('transaction'));
+    }
+
 }

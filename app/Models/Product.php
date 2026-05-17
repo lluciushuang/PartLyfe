@@ -24,4 +24,9 @@ class Product extends Model
     {
         return $this->hasMany(ProductPrice::class);
     }
+    // Relasi 3: 1 Produk bisa memiliki banyak gambar sekaligus
+    public function images()
+    {
+        return $this->hasMany(ProductImage::class);
+    }
 }

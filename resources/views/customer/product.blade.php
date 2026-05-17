@@ -3,9 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    
     <title>{{ $product->name }} | Partlyfe</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script type="text/javascript"
+            src="https://app.sandbox.midtrans.com/snap/snap.js"
+            data-client-key="{{ config('midtrans.client_key') }}"></script>
+
     <style>
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -28,7 +35,6 @@
             </form>
             
             <div class="flex items-center gap-6 ml-8">
-                <!-- Tambahan Ikon Wishlist -->
                 <a href="{{ Auth::check() ? route('customer.wishlist') : route('login') }}" class="relative text-slate-400 hover:text-rose-400 transition cursor-pointer">
                     <i class="fa-solid fa-heart text-xl"></i>
                 </a>
@@ -61,7 +67,13 @@
                     
                     <div class="w-[350px] flex-shrink-0 sticky top-4">
                         <div class="glass-card rounded-3xl aspect-square flex items-center justify-center relative overflow-hidden group border border-white/10 shadow-lg">
-                            <i class="fa-solid fa-box-open text-9xl text-slate-700 group-hover:text-slate-500 transition-colors duration-500"></i>
+                            <div class="w-full h-full flex items-center justify-center bg-slate-900/60 relative overflow-hidden rounded-2xl">
+                                @if($product->images && $product->images->isNotEmpty())
+                                    <img src="{{ asset('img/' . basename($product->images->first()->image_path)) }}" alt="{{ $product->name }}" class="w-full h-full object-contain p-6">
+                                @else
+                                    <i class="fa-solid fa-box-open text-9xl text-slate-700 group-hover:text-slate-500 transition-colors duration-500"></i>
+                                @endif
+                            </div>
                             <div class="absolute top-4 left-4 bg-amber-500/20 backdrop-blur-md text-amber-400 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-amber-500/30 shadow-lg">100% Original</div>
                         </div>
                     </div>
@@ -138,7 +150,9 @@
                                             <button type="submit" class="w-full bg-amber-500 text-slate-900 font-black py-3 rounded-xl hover:bg-amber-400 hover:scale-[1.02] transition shadow-[0_0_20px_rgba(245,158,11,0.4)] flex justify-center items-center gap-2">
                                                 <i class="fa-solid fa-cart-plus"></i> + Keranjang
                                             </button>
-                                            <button type="button" onclick="alert('Maaf bos, fitur Checkout Terintegrasi masih dalam pengembangan tim Partlyfe!')" class="w-full bg-transparent border border-amber-500 text-amber-400 font-bold py-3 rounded-xl hover:bg-amber-500/10 transition">Beli Langsung</button>
+                                            <button type="button" id="btn-beli-langsung" data-product-id="{{ $product->id }}" class="w-full bg-transparent border border-amber-500 text-amber-400 font-bold py-3 rounded-xl hover:bg-amber-500/10 transition flex justify-center items-center gap-2">
+                                                <i class="fa-solid fa-bolt"></i> Beli Langsung
+                                            </button>
                                         </div>
                                     </form>
                                 @else
@@ -206,7 +220,11 @@
                                         @if($rec->current_stock > 0)
                                             <div class="absolute top-2 left-2 bg-rose-500/90 backdrop-blur-sm text-white text-[10px] font-black px-2 py-1 rounded-md z-10 border border-rose-400/50">Cashback</div>
                                         @endif
-                                        <i class="fa-solid fa-box-open text-4xl text-slate-700 group-hover:scale-110 group-hover:text-amber-500/20 transition-all duration-500"></i>
+                                        @if($rec->images && $rec->images->isNotEmpty())
+                                            <img src="{{ asset('img/' . basename($rec->images->first()->image_path)) }}" alt="{{ $rec->name }}" class="w-full h-full object-contain p-2">
+                                        @else
+                                            <i class="fa-solid fa-box-open text-4xl text-slate-700 group-hover:scale-110 group-hover:text-amber-500/20 transition-all duration-500"></i>
+                                        @endif
                                         @if($recIsOutofStock)
                                             <div class="absolute inset-0 bg-black/70 backdrop-blur-[2px] flex items-center justify-center z-20">
                                                 <span class="bg-rose-600 text-white font-black text-[10px] px-3 py-1 rounded-full shadow-xl">Habis</span>
@@ -268,6 +286,72 @@
                 qtyInput.value = parseInt(qtyInput.value) - 1;
                 updateSubtotal();
             }
+        }
+
+        // ==========================================
+        // LOGIKA MIDTRANS - TOMBOL BELI LANGSUNG
+        // ==========================================
+        const btnBeliLangsung = document.getElementById('btn-beli-langsung');
+        if(btnBeliLangsung) {
+            btnBeliLangsung.addEventListener('click', async function() {
+                const productId = this.getAttribute('data-product-id');
+                const qty = document.getElementById('qtyInput').value;
+
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+                this.disabled = true;
+
+                try {
+                    const response = await fetch("{{ route('customer.payment.initiate') }}", {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        },
+                        body: JSON.stringify({ product_id: productId, qty: qty })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.status === 'success') {
+                        window.snap.pay(data.snap_token, {
+                            onSuccess: async function(result) {
+                                await fetch("{{ route('customer.payment.update-status') }}", {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                                    },
+                                    body: JSON.stringify({ 
+                                        order_id: result.order_id,
+                                        transaction_status: result.transaction_status
+                                    })
+                                });
+
+                                alert("Pembayaran Berhasil! Pesanan sedang diproses.");
+                                window.location.href = "/customer/transactions";
+                            },
+                            onPending: function(result) {
+                                alert("Silakan selesaikan pembayaran!");
+                            },
+                            onError: function(result) {
+                                alert("Pembayaran Gagal!");
+                            },
+                            onClose: function() {
+                                alert('Anda menutup popup sebelum menyelesaikan pembayaran.');
+                            }
+                        });
+                    } else {
+                        alert(data.message || 'Gagal memproses token.');
+                    }
+                } catch (error) {
+                    console.error(error);
+                    alert("Koneksi ke server bermasalah.");
+                } finally {
+                    this.innerHTML = originalText;
+                    this.disabled = false;
+                }
+            });
         }
     </script>
 </body>

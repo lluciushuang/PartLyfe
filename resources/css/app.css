@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+
+/* Custom Override untuk Pagination Laravel di Dark Mode */
+nav[role="navigation"] p.text-sm.text-gray-700 {
+    color: #94a3b8 !important; /* Warna slate-400 */
+}
+nav[role="navigation"] span.font-medium {
+    color: #f59e0b !important; /* Warna amber-500 biar angka tebalnya nyala */
+}
+nav[role="navigation"] a, nav[role="navigation"] span[aria-disabled] {
+    color: #cbd5e1 !important; /* Warna slate-300 */
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    background-color: rgba(15, 23, 42, 0.5) !important;
+}
