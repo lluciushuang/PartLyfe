@@ -13,17 +13,29 @@ class DashboardController extends Controller
     // Menampilkan halaman Dashboard Overview Utama Admin
     public function index()
     {
-        // KITA SUNTIKKAN DATA STATISTIK NYATA DARI DATABASE
+        // Menghitung statistik global
         $totalProducts = Product::count();
         $totalCustomers = User::whereIn('role', ['b2c', 'b2b'])->count();
-        $totalTransactions = Transaction::count(); // Pastikan model Transaction sudah ada
-        $lowStockProducts = Product::where('current_stock', '<=', 5)->count(); // Produk mau habis
+        $totalTransactions = Transaction::count();
+        
+        // Menghitung total pendapatan (asumsi kolomnya bernama total_amount di tabel transactions)
+        $totalRevenue = Transaction::sum('total_amount'); 
+
+        // Mengambil 5 transaksi paling baru beserta data pelanggan yang membeli
+        $recentTransactions = Transaction::with('user')->latest()->take(5)->get();
+
+        // Mengambil produk yang stoknya 5 ke bawah
+        $lowStockItems = Product::where('current_stock', '<=', 5)->take(5)->get();
+        $lowStockCount = Product::where('current_stock', '<=', 5)->count();
 
         return view('admin.dashboard', compact(
             'totalProducts', 
             'totalCustomers', 
             'totalTransactions',
-            'lowStockProducts'
+            'totalRevenue',
+            'recentTransactions',
+            'lowStockItems',
+            'lowStockCount'
         ));
     }
 
