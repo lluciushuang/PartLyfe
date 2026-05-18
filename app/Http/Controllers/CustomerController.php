@@ -23,57 +23,34 @@ class CustomerController extends Controller
     // 1. AREA KATALOG & PRODUK UTAMA
     // ==========================================================
 
-   public function dashboard(Request $request)
+   public function dashboard(\Illuminate\Http\Request $request)
     {
-        // 1. Panggil relasi prices dan images sekaligus agar loading ngebut
-        $query = Product::with(['prices', 'images']);
+        // 1. Ambil semua kategori untuk menu filter di bagian atas
+        $categories = \App\Models\Category::all();
 
-        // 2. SIHIR PRIORITAS: Lempar produk yang stoknya habis (0) ke urutan paling belakang
-        $query->orderByRaw("CASE WHEN current_stock <= 0 THEN 1 ELSE 0 END ASC");
+        // 2. Ambil query pencarian/filter dari URL
+        $search = $request->input('search');
 
-        // Fitur Pencarian (Search)
-        if ($request->has('search') && $request->search != '') {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('brand', 'like', "%{$search}%")
-                  ->orWhere('item_code', 'like', "%{$search}%");
+        // 3. Bangun query dasar: Ambil produk yang stoknya ready
+        $productsQuery = \App\Models\Product::with(['prices', 'images', 'category']);
+        // 🧠 LOGIKA PINTAR AI FILTER & SEARCH
+        if ($search) {
+            $productsQuery->where(function($query) use ($search) {
+                $query->where('name', 'LIKE', "%{$search}%")
+                    ->orWhere('brand', 'LIKE', "%{$search}%")
+                    ->orWhere('item_code', 'LIKE', "%{$search}%")
+                    // JURUS KUNCI: Cari juga ke dalam tabel 'categories' yang berelasi
+                    ->orWhereHas('category', function($q) use ($search) {
+                        $q->where('name', 'LIKE', "%{$search}%");
+                    });
             });
         }
 
-        // Fitur Filter Kategori
-        if ($request->has('category') && $request->category != '') {
-            $query->where('category_id', $request->category);
-        }
+        // 4. Ambil data produk dengan pagination (12 produk per halaman)
+        $products = $productsQuery->latest()->paginate(12);
 
-        // Fitur Urutkan (Sorting) Harga
-        if ($request->has('sort')) {
-            if ($request->sort == 'terendah') {
-                $query->orderBy(
-                    ProductPrice::select('price')
-                        ->whereColumn('product_prices.product_id', 'products.id')
-                        ->where('price_level', 1) // 1 = Harga Retail B2C
-                        ->limit(1),
-                    'asc'
-                );
-            } elseif ($request->sort == 'tertinggi') {
-                $query->orderBy(
-                    ProductPrice::select('price')
-                        ->whereColumn('product_prices.product_id', 'products.id')
-                        ->where('price_level', 1)
-                        ->limit(1),
-                    'desc'
-                );
-            }
-        } else {
-            // Default: Urutkan dari barang terbaru (Relevansi)
-            $query->latest();
-        }
-
-        $products = $query->paginate(15)->withQueryString(); 
-        $categories = Category::all();
-
-        return view('customer.dashboard', compact('products', 'categories'));
+        // 5. Lempar semua variabel dengan selamat ke view dashboard
+        return view('customer.dashboard', compact('categories', 'products', 'search'));
     }
 
     public function productDetail($id)
@@ -186,16 +163,40 @@ class CustomerController extends Controller
     // 4. AREA TRANSAKSI & PENGATURAN USER
     // ==========================================================
 
-    public function transactions()
-    {
-        // Mengambil riwayat transaksi user beserta rincian barangnya
-        $transactions = Transaction::with('details.product')
-            ->where('user_id', Auth::id())
-            ->latest()
-            ->get();
-            
-        return view('customer.transactions', compact('transactions'));
+    public function transactions(\Illuminate\Http\Request $request)
+{
+    // 1. Ambil parameter filter status dari URL (contoh: ?status=pending)
+    $statusFilter = $request->query('status');
+
+    // 2. Bangun query dasar transaksi milik user yang login
+    $query = \App\Models\Transaction::with('details.product')
+        ->where('user_id', \Illuminate\Support\Facades\Auth::id());
+
+    // 3. 🧠 LOGIKA FILTER PINTAR
+    if ($statusFilter) {
+        if ($statusFilter == 'menunggu') {
+            // Filter untuk transaksi yang belum dibayar
+            $query->whereIn('status', ['pending', 'unpaid', 'menunggu']);
+        } elseif ($statusFilter == 'diproses') {
+            // Filter untuk transaksi lunas yang sedang disiapkan / diproses
+            $query->where('status', 'processing');
+        } elseif ($statusFilter == 'gagal') {
+            // Filter untuk transaksi hangus atau dibatalkan
+            $query->whereIn('status', ['expire', 'cancel', 'gagal']);
+        } else {
+            // Filter fallback jika ada status kustom lain (misal: 'dikirim', 'selesai')
+            $query->where('status', $statusFilter);
+        }
     }
+
+    // 4. Eksekusi ambil data terbaru
+    $transactions = $query->latest()->get();
+        
+    // 5. Kirim data transaksinya beserta status aktif saat ini ke Blade
+    return view('customer.transactions', compact('transactions', 'statusFilter'));
+}
+
+    
 
     // ==========================================================
     // 5. AREA KABAR ADMIN (BROADCAST)
@@ -364,14 +365,12 @@ class CustomerController extends Controller
         $dbDetails = []; 
 
         if ($request->has('product_id')) {
-            // PERBAIKAN: Pakai "find" biasa, BUKAN paginate()
             $product = \App\Models\Product::with('prices')->find($request->product_id);
             
             if (!$product) return response()->json(['status' => 'error', 'message' => 'Produk tidak ditemukan.'], 404);
             
             $qty = $request->input('qty', 1);
 
-            // GEMBOK KETAT 2: Cek stok saat Beli Langsung
             if ($product->current_stock < $qty) {
                 return response()->json([
                     'status' => 'error', 
@@ -390,7 +389,6 @@ class CustomerController extends Controller
                 'name' => substr($product->name, 0, 50),
             ];
 
-            // Siapkan data untuk tabel transaction_details
             $dbDetails[] = [
                 'product_id' => $product->id,
                 'qty' => $qty,
@@ -403,7 +401,6 @@ class CustomerController extends Controller
             if ($cartItems->isEmpty()) return response()->json(['status' => 'error', 'message' => 'Keranjang kosong.'], 400);
 
             foreach ($cartItems as $item) {
-                // GEMBOK KETAT 3: Cek stok untuk setiap barang di keranjang sebelum checkout
                 if ($item->product->current_stock < $item->qty) {
                     return response()->json([
                         'status' => 'error', 
@@ -422,7 +419,6 @@ class CustomerController extends Controller
                         'name' => substr($item->product->name, 0, 50),
                     ];
                     
-                    // Siapkan data untuk tabel transaction_details
                     $dbDetails[] = [
                         'product_id' => $item->product->id,
                         'qty' => $item->qty,
@@ -438,6 +434,7 @@ class CustomerController extends Controller
 
         if ($grossAmount <= 0) return response()->json(['status' => 'error', 'message' => 'Total tagihan Rp 0.'], 400);
 
+        // 🚀 SETTING PARAMETER MIDTRANS DENGAN EXPIRY WAKTU
         $params = [
             'transaction_details' => [
                 'order_id' => $orderId,
@@ -449,12 +446,16 @@ class CustomerController extends Controller
                 'email' => \Illuminate\Support\Facades\Auth::user()->email,
                 'phone' => \Illuminate\Support\Facades\Auth::user()->phone ?? '08123456789',
             ],
+            // 👇 TAMBAHAN: Aturan kedaluwarsa (Expired) dari Midtrans
+            'expiry' => [
+                'start_time' => date("Y-m-d H:i:s O"),
+                'unit' => 'minute',
+                'duration' => 1440 // 1440 menit = 24 Jam. Silakan diubah misal jadi 120 (2 Jam) jika ingin lebih cepat hangus.
+            ],
         ];
 
-        // PROSES SIMPAN KE DATABASE (MENGGUNAKAN DB TRANSACTION)
         \Illuminate\Support\Facades\DB::beginTransaction();
         try {
-            // A. Simpan ke tabel transactions
             $transaction = \App\Models\Transaction::create([
                 'user_id' => \Illuminate\Support\Facades\Auth::id(),
                 'invoice_number' => $orderId,
@@ -462,7 +463,6 @@ class CustomerController extends Controller
                 'status' => 'pending', 
             ]);
 
-            // B. Simpan ke tabel transaction_details
             foreach ($dbDetails as $detail) {
                 \App\Models\TransactionDetail::create([
                     'transaction_id' => $transaction->id,
@@ -472,15 +472,17 @@ class CustomerController extends Controller
                 ]);
             }
 
-            // C. Kosongkan keranjang jika checkout berasal dari halaman Keranjang
             if (!$request->has('product_id')) {
                 \App\Models\Cart::where('user_id', \Illuminate\Support\Facades\Auth::id())->delete();
             }
 
-            // D. Minta Token Midtrans
+            // Minta Token Midtrans
             $snapToken = \Midtrans\Snap::getSnapToken($params);
             
-            // Jika semua aman, Permanenkan data di Database
+            // menyimpan token ke database agar bisa di-load ulang di halaman Transaksi
+            $transaction->snap_token = $snapToken;
+            $transaction->save();
+            
             \Illuminate\Support\Facades\DB::commit();
 
             return response()->json([
@@ -489,7 +491,6 @@ class CustomerController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            // Jika gagal buat token atau gagal simpan DB, batalkan semua insert data
             \Illuminate\Support\Facades\DB::rollBack();
             return response()->json([
                 'status' => 'error',
@@ -507,34 +508,68 @@ class CustomerController extends Controller
         $orderId = $request->input('order_id');
         $status = $request->input('transaction_status'); 
 
-        $transaction = \App\Models\Transaction::where('invoice_number', $orderId)->with('details.product')->first();
+        // Cari transaksi berdasarkan nomor invoice beserta detail produknya
+        $transaction = \App\Models\Transaction::where('invoice_number', $orderId)
+            ->with('details.product')
+            ->first();
         
-        if ($transaction && $transaction->status == 'pending') {
+        // Proteksi 1: Jika nomor invoice gadungan / tidak ditemukan
+        if (!$transaction) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Nomor Invoice ' . $orderId . ' tidak ditemukan di database!'
+            ], 404);
+        }
+
+        // Cek apakah status yang dikirim dari Midtrans/Frontend bernilai sukses
+        if ($status == 'settlement' || $status == 'capture' || $status == 'success' || $status == 'processing') {
             
-            if ($status == 'settlement' || $status == 'capture') {
+            // Proteksi 2: Gembok kebal bug. Izinkan update jika status DB adalah pending, expire, atau cancel.
+            // Ini agar jika transaksi sempat hangus karena salah timezone, bisa dihidupkan kembali saat lunas!
+            if (in_array($transaction->status, ['pending', 'expire', 'cancel', 'gagal'])) {
+                
                 \Illuminate\Support\Facades\DB::beginTransaction();
                 try {
-                    // 1. Ubah Status
+                    // 1. Ubah Status ke 'processing' sesuai kebutuhan bisnismu
                     $transaction->status = 'processing';
                     $transaction->save();
 
                     // 2. Potong Stok Fisik Produk
                     foreach ($transaction->details as $detail) {
                         $product = $detail->product;
-                        // Pastikan stok tidak minus (walau sudah di-lock sebelumnya)
-                        $product->current_stock = max(0, $product->current_stock - $detail->qty);
-                        $product->save();
+                        if ($product) {
+                            $product->current_stock = max(0, $product->current_stock - $detail->qty);
+                            $product->save();
+                        }
                     }
                     
                     \Illuminate\Support\Facades\DB::commit();
+                    
+                    return response()->json([
+                        'status' => 'success',
+                        'message' => 'Pembayaran Berhasil! Stok barang telah dipotong.'
+                    ]);
+
                 } catch (\Exception $e) {
                     \Illuminate\Support\Facades\DB::rollBack();
-                    // Log error jika perlu
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Gagal memproses perubahan database: ' . $e->getMessage()
+                    ], 500);
                 }
+            } else {
+                // Jika statusnya sudah 'processing', biarkan saja (berarti sudah lunas sebelumnya)
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Transaksi sudah berstatus ' . $transaction->status
+                ]);
             }
         }
 
-        return response()->json(['status' => 'success']);
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Status diterima: ' . $status
+        ]);
     }
     
  
@@ -624,6 +659,80 @@ class CustomerController extends Controller
 
         // 5. Lempar data produk utama dan hasil rekomendasi AI beneran ke file Blade
         return view('customer.product', compact('product', 'recommendations'));
+    }
+    public function aiSearch(\Illuminate\Http\Request $request)
+    {
+        $keluhan = $request->input('q');
+        if (empty($keluhan)) return response()->json([]);
+
+        $apiKey = env('GEMINI_API_KEY'); 
+
+        try {
+            // 🧠 PROMPT INTRUKSI UNTUK GEMINI AI
+            $prompt = "Kamu adalah kepala mekanik bengkel motor yang ahli. Pelanggan awam mengeluh: '{$keluhan}'. Analisis masalahnya. Berikan output HANYA dalam format JSON valid tanpa markdown, dengan struktur: { \"keywords\": [\"nama_sparepart1\", \"nama_sparepart2\"], \"explanation\": \"Penjelasan ringkas maksimal 2 kalimat kenapa masalah ini terjadi dan komponen apa yang harus diganti.\" }";
+
+            // 🚀 TEMBAK KE GOOGLE GEMINI API
+            $response = \Illuminate\Support\Facades\Http::withHeaders([
+                'Content-Type' => 'application/json',
+            ])->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={$apiKey}", [
+                'contents' => [
+                    ['parts' => [['text' => $prompt]]]
+                ]
+            ]);
+
+            $geminiData = $response->json();
+            $textResponse = $geminiData['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            
+            // Bersihkan format jika AI membalas dengan block markdown
+            $textResponse = str_replace(['```json', '```'], '', $textResponse);
+            $parsedAi = json_decode(trim($textResponse), true);
+
+            $aiKeywords = $parsedAi['keywords'] ?? explode(' ', $keluhan);
+            $explanation = $parsedAi['explanation'] ?? 'Mekanik AI sedang menganalisis masalah pada komponen motor Anda...';
+
+        } catch (\Exception $e) {
+            // Fallback jika API sedang gangguan
+            $aiKeywords = explode(' ', $keluhan);
+            $explanation = "Sistem AI sedang offline. Menampilkan pencarian standar untuk kata kunci Anda.";
+        }
+
+        // =========================================================
+        // QUERY KE DATABASE BERDASARKAN KEYWORD DARI GEMINI
+        // =========================================================
+        $query = \App\Models\Product::with('prices'); // Ambil semua termasuk yang kosong agar bisa di-wishlist
+        
+        $query->where(function($q) use ($aiKeywords) {
+            foreach ($aiKeywords as $keyword) {
+                $q->orWhere('name', 'LIKE', '%' . $keyword . '%')
+                  ->orWhere('brand', 'LIKE', '%' . $keyword . '%')
+                  ->orWhere('category_id', 'LIKE', '%' . $keyword . '%');
+            }
+        });
+
+        // Ambil 5 produk paling relevan
+        $products = $query->take(5)->get();
+
+        $results = $products->map(function($prod) {
+            $price = $prod->prices->where('price_level', 1)->first();
+            $image = $prod->images->first() ? asset('storage/products/' . basename($prod->images->first()->image_path)) : null;
+            
+            return [
+                'id' => $prod->id,
+                'name' => $prod->name,
+                'brand' => $prod->brand,
+                'price' => number_format($price->price ?? 0, 0, ',', '.'),
+                'image' => $image,
+                'url' => route('product.detail', $prod->id)
+            ];
+        });
+
+        // Kirim hasil keyword, list produk, dan PENJELASAN AI ke Frontend
+        return response()->json([
+            'status' => 'success',
+            'interpreted_as' => implode(', ', array_unique($aiKeywords)), 
+            'explanation' => $explanation,
+            'data' => $results
+        ]);
     }
 
 }

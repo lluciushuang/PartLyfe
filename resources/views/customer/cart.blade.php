@@ -1,358 +1,216 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Keranjang Saya | Partlyfe</title>
-
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Keranjang Belanja | Partlyfe</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- Midtrans Snap -->
-    <script
-        type="text/javascript"
-        src="https://app.sandbox.midtrans.com/snap/snap.js"
-        data-client-key="{{ config('midtrans.client_key') }}">
-    </script>
+    <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js"
+        data-client-key="{{ config('midtrans.client_key') }}"></script>
 
     <style>
-        body {
-            background-color: #020617;
-            color: white;
-            overflow-x: hidden;
-        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            transform: translateZ(0);
-            will-change: transform, backdrop-filter;
+        .glass-header { 
+            background: rgba(255, 255, 255, 0.8); 
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); 
+            border-b: 1px solid rgba(226, 232, 240, 0.8); 
         }
-
-        .glass-card {
-            background: rgba(30, 41, 59, 0.6);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+        .luxury-card-flat {
+            background: #ffffff;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            box-shadow: 0 4px 20px rgba(148, 163, 184, 0.04);
         }
-
-        .no-scrollbar::-webkit-scrollbar {
-            display: none;
+        .qty-btn-light {
+            width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            font-size: 1rem; font-weight: 700; transition: all 0.15s; cursor: pointer;
         }
-
-        .no-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
-        @keyframes slideDownFade {
-            0% {
-                opacity: 0;
-                transform: translate(-50%, -20px);
-            }
-
-            100% {
-                opacity: 1;
-                transform: translate(-50%, 0);
-            }
-        }
-
-        .toast-enter {
-            animation: slideDownFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
+        .qty-btn-light:hover { background: rgba(0,0,0,0.05); }
     </style>
 </head>
 
-<body class="bg-[#020617] font-sans text-slate-200 h-screen overflow-hidden flex selection:bg-amber-500 selection:text-slate-900">
+<body class="bg-[#f8fafc] font-sans text-slate-700 h-screen overflow-hidden flex">
 
     @include('layouts.sidebar')
 
     <div class="flex-1 flex flex-col h-screen overflow-hidden relative">
 
-        <div class="absolute top-20 right-10 w-96 h-96 bg-amber-500/10 rounded-full filter blur-[120px] pointer-events-none z-0"></div>
-
-        <header class="h-20 glass-panel flex items-center justify-between px-8 flex-shrink-0 z-50 sticky top-0 border-b border-white/5">
-
-            <h2 class="text-xl font-black text-white flex items-center gap-3">
-                <i class="fa-solid fa-cart-shopping text-amber-500"></i>
-                Keranjang Belanja
-            </h2>
-
-            <div class="flex items-center gap-6 ml-8">
-                <a href="{{ Auth::check() ? route('customer.wishlist') : route('login') }}"
-                   class="relative text-slate-400 hover:text-rose-400 transition cursor-pointer">
-
-                    <i class="fa-solid fa-heart text-2xl"></i>
+        {{-- Header --}}
+        <header class="h-20 glass-header flex items-center justify-between px-8 flex-shrink-0 z-50">
+            <div class="text-sm font-bold text-slate-400">
+                <a href="{{ route('customer.dashboard') }}" class="hover:text-amber-600 transition-colors">Beranda</a>
+                <i class="fa-solid fa-chevron-right text-[8px] mx-1 opacity-40"></i>
+                <span class="text-slate-700">Keranjang Belanja</span>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <a href="{{ route('customer.profile') }}" class="w-9 h-9 bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900 rounded-full flex items-center justify-center font-black text-sm" style="box-shadow: 0 4px 12px rgba(245,158,11,0.2);">
+                    {{ substr(Auth::user()->name, 0, 1) }}
                 </a>
             </div>
         </header>
 
-        <main class="flex-1 overflow-y-auto p-8 scrollbar-hide relative z-10 max-w-[1200px] mx-auto w-full">
+        {{-- Main Cart Area --}}
+        <main class="flex-1 overflow-y-auto p-8 bg-[#f8fafc]">
+            <div class="max-w-[1200px] mx-auto">
+                <h1 class="text-2xl font-black text-slate-800 mb-8 flex items-center gap-3">
+                    <i class="fa-solid fa-cart-shopping text-amber-500"></i> Keranjang Anda
+                </h1>
 
-            @if($cartItems->count() > 0)
-
-                <div class="flex flex-col lg:flex-row gap-8 items-start">
-
-                    <!-- LIST KERANJANG -->
-                    <div class="flex-grow w-full space-y-4">
-
-                        @php $totalBelanja = 0; @endphp
-
+                @if(isset($cartItems) && $cartItems->count() > 0)
+                <div class="flex gap-8 items-start">
+                    
+                    {{-- LIST ITEM KERANJANG --}}
+                    <div class="flex-grow space-y-4">
+                        @php $totalCartPrice = 0; @endphp
                         @foreach($cartItems as $item)
-
-                            @php
-                                $retailPrice = $item->product->prices->where('price_level', 1)->first()->price ?? 0;
-                                $subtotal = $retailPrice * $item->qty;
-                                $totalBelanja += $subtotal;
-                            @endphp
-
-                            <div class="glass-card rounded-2xl p-4 flex gap-6 items-center relative group hover:border-white/20 transition-colors shadow-lg">
-
-                                <!-- DELETE -->
-                                <form action="{{ route('cart.remove', $item->id) }}"
-                                      method="POST"
-                                      class="absolute top-4 right-4">
-
-                                    @csrf
-                                    @method('DELETE')
-
-                                    <button type="submit"
-                                            class="text-slate-500 hover:text-rose-500 transition hover:scale-110">
-
-                                        <i class="fa-solid fa-trash-can"></i>
-                                    </button>
-                                </form>
-
-                                <!-- ICON -->
-                                <div class="w-24 h-24 bg-slate-900/50 rounded-xl flex items-center justify-center flex-shrink-0 border border-white/5 group-hover:border-amber-500/30 transition-colors">
-
-                                    <i class="fa-solid fa-box-open text-3xl text-slate-600 group-hover:text-amber-500/50 transition-colors"></i>
-                                </div>
-
-                                <!-- INFO -->
-                                <div class="flex-grow">
-
-                                    <p class="text-[10px] text-amber-500 font-bold uppercase tracking-wider mb-1">
-                                        {{ $item->product->brand }}
-                                    </p>
-
-                                    <a href="{{ route('product.detail', $item->product_id) }}"
-                                       class="font-bold text-lg text-white hover:text-amber-400 transition">
-
-                                        {{ $item->product->name }}
-                                    </a>
-
-                                    <p class="font-black text-white mt-1">
-                                        Rp {{ number_format($retailPrice, 0, ',', '.') }}
-
-                                        <span class="text-xs font-normal text-slate-500">
-                                            / pcs
-                                        </span>
-                                    </p>
-
-                                    <!-- QTY -->
-                                    <div class="flex items-center gap-4 mt-4">
-
-                                        <form action="{{ route('cart.update', $item->id) }}"
-                                              method="POST"
-                                              class="flex items-center bg-slate-900/80 border border-white/10 rounded-lg p-1 shadow-inner">
-
-                                            @csrf
-                                            @method('PATCH')
-
-                                            <button type="button"
-                                                    onclick="this.parentNode.querySelector('input[type=number]').stepDown(); this.parentNode.submit();"
-                                                    class="w-8 h-8 rounded-md hover:bg-white/10 text-slate-300 font-bold">
-
-                                                -
-                                            </button>
-
-                                            <input type="number"
-                                                   name="qty"
-                                                   value="{{ $item->qty }}"
-                                                   min="1"
-                                                   max="{{ $item->product->current_stock }}"
-                                                   onchange="this.form.submit()"
-                                                   class="w-10 text-center font-bold border-none focus:ring-0 p-0 text-white bg-transparent outline-none">
-
-                                            <button type="button"
-                                                    onclick="this.parentNode.querySelector('input[type=number]').stepUp(); this.parentNode.submit();"
-                                                    class="w-8 h-8 rounded-md hover:bg-white/10 text-amber-400 font-bold">
-
-                                                +
-                                            </button>
-                                        </form>
-
-                                        <p class="text-xs text-slate-500">
-                                            Stok sisa: {{ $item->product->current_stock }}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- SUBTOTAL -->
-                                <div class="text-right flex-shrink-0 mt-auto pt-6">
-
-                                    <p class="text-xs text-slate-400 mb-1">
-                                        Subtotal Item
-                                    </p>
-
-                                    <p class="text-xl font-black text-amber-400">
-                                        Rp {{ number_format($subtotal, 0, ',', '.') }}
-                                    </p>
-                                </div>
+                        @php 
+                            $prodPrice = $item->product->prices->where('price_level', 1)->first()->price ?? 0;
+                            $itemSubtotal = $prodPrice * $item->qty;
+                            $totalCartPrice += $itemSubtotal;
+                        @endphp
+                        <div class="luxury-card-flat rounded-2xl p-5 bg-white flex items-center justify-between gap-6" id="cart-item-{{ $item->id }}">
+                            {{-- Foto Produk --}}
+                            <div class="w-20 h-20 bg-slate-50 rounded-xl border border-slate-100 flex-shrink-0 p-2 flex items-center justify-center">
+                                @if($item->product->images && $item->product->images->isNotEmpty())
+                                    <img src="{{ asset('storage/products/' . basename($item->product->images->first()->image_path)) }}" class="max-w-full max-h-full object-contain">
+                                @else
+                                    <i class="fa-solid fa-box text-slate-300 text-xl"></i>
+                                @endif
                             </div>
 
+                            {{-- Informasi Nama & Merk --}}
+                            <div class="flex-grow min-w-0">
+                                <p class="text-[10px] text-amber-600 font-bold uppercase tracking-wider mb-0.5">{{ $item->product->brand }}</p>
+                                <a href="{{ route('product.detail', $item->product_id) }}" class="text-sm font-bold text-slate-800 hover:text-amber-600 transition-colors line-clamp-1 mb-1">
+                                    {{ $item->product->name }}
+                                </a>
+                                <p class="text-xs font-black text-slate-900">Rp {{ number_format($prodPrice, 0, ',', '.') }}</p>
+                            </div>
+
+                            {{-- Kontrol Kuantitas Jumlah --}}
+                            <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-1 flex-shrink-0">
+                                <button type="button" class="qty-btn-light text-slate-500" onclick="updateCartQty({{ $item->id }}, -1)">−</button>
+                                <span id="display-qty-{{ $item->id }}" class="w-8 text-center font-black text-slate-800 text-sm select-none">{{ $item->qty }}</span>
+                                <button type="button" class="qty-btn-light text-amber-600" onclick="updateCartQty({{ $item->id }}, 1)">+</button>
+                            </div>
+
+                            {{-- Subtotal Item & Tombol Hapus --}}
+                            <div class="text-right flex-shrink-0 min-w-[120px]">
+                                <p class="text-sm font-black text-amber-700 mb-1" id="item-subtotal-{{ $item->id }}">
+                                    Rp {{ number_format($itemSubtotal, 0, ',', '.') }}
+                                </p>
+                                <button type="button" onclick="deleteCartItem({{ $item->id }})" class="text-xs font-bold text-rose-500 hover:text-rose-700 transition-colors">
+                                    <i class="fa-solid fa-trash-can mr-1"></i> Hapus
+                                </button>
+                            </div>
+                        </div>
                         @endforeach
                     </div>
 
-                    <!-- SUMMARY -->
-                    <div class="w-full lg:w-[350px] flex-shrink-0 sticky top-4">
-
-                        <div class="glass-panel rounded-3xl p-6 shadow-2xl border border-white/10">
-
-                            <h3 class="font-bold text-white mb-6 text-lg">
-                                Ringkasan Belanja
-                            </h3>
-
-                            <div class="space-y-4 mb-6 text-sm">
-
-                                <div class="flex justify-between text-slate-400">
-                                    <span>
-                                        Total Harga ({{ $cartItems->sum('qty') }} barang)
-                                    </span>
-
-                                    <span class="text-white">
-                                        Rp {{ number_format($totalBelanja, 0, ',', '.') }}
-                                    </span>
-                                </div>
-
-                                <div class="flex justify-between text-slate-400">
-                                    <span>Diskon Platform</span>
-                                    <span class="text-rose-400">- Rp 0</span>
-                                </div>
-
-                                <hr class="border-white/5">
-
-                                <div class="flex justify-between items-center pt-2">
-
-                                    <span class="font-bold text-white">
-                                        Total Tagihan
-                                    </span>
-
-                                    <span class="text-2xl font-black text-amber-400">
-                                        Rp {{ number_format($totalBelanja, 0, ',', '.') }}
-                                    </span>
-                                </div>
+                    {{-- RINGKASAN BELANJA / CHECKOUT BOX --}}
+                    <div class="w-[360px] flex-shrink-0 sticky top-4">
+                        <div class="luxury-card-flat rounded-3xl p-6 bg-white shadow-sm">
+                            <h3 class="font-black text-slate-800 mb-5 text-base pb-3 border-b border-slate-100">Ringkasan Belanja</h3>
+                            
+                            <div class="flex justify-between items-center mb-6">
+                                <p class="text-sm text-slate-500 font-medium">Total Harga Barang</p>
+                                <p class="text-lg font-black text-slate-900" id="cart-total-text">Rp {{ number_format($totalCartPrice, 0, ',', '.') }}</p>
                             </div>
 
-                            <!-- BUTTON CHECKOUT -->
-                            <button id="btn-checkout-cart"
-                                    class="w-full bg-emerald-600 text-white font-black py-3.5 rounded-xl hover:bg-emerald-500 hover:scale-[1.02] transition shadow-[0_0_20px_rgba(16,185,129,0.4)]">
-
-                                Bayar Semua Pesanan ({{ $cartItems->sum('qty') }})
+                            <button type="button" id="btn-checkout-cart" class="w-full bg-gradient-to-r from-amber-400 to-amber-500 text-slate-900 font-black py-3.5 rounded-xl text-sm flex items-center justify-center gap-2 hover:brightness-105 transition-all shadow-md shadow-amber-500/10">
+                                <i class="fa-solid fa-credit-card"></i> Lanjut ke Pembayaran
                             </button>
                         </div>
                     </div>
+
                 </div>
-
-            @else
-
-                <!-- EMPTY -->
-                <div class="flex flex-col items-center justify-center h-[60vh] text-center">
-
-                    <i class="fa-solid fa-cart-shopping text-7xl text-slate-700 mb-6"></i>
-
-                    <h2 class="text-2xl font-black text-white mb-2">
-                        Keranjangmu masih kosong
-                    </h2>
-
-                    <p class="text-slate-400 mb-8">
-                        Yuk cari suku cadang incaranmu di katalog kami!
-                    </p>
-
-                    <a href="{{ route('customer.dashboard') }}"
-                       class="bg-amber-500 text-slate-900 font-bold px-8 py-3 rounded-full hover:bg-amber-400 transition shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-
-                        Mulai Belanja
+                @else
+                <div class="py-20 text-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <i class="fa-solid fa-basket-shopping text-5xl text-slate-200 mb-4"></i>
+                    <p class="text-base text-slate-500 font-bold">Keranjang belanja Anda masih kosong</p>
+                    <a href="{{ route('customer.dashboard') }}" class="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-slate-900 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-amber-600 transition-colors">
+                        Kembali Belanja Suku Cadang
                     </a>
                 </div>
-
-            @endif
-
+                @endif
+            </div>
         </main>
     </div>
 
-    <!-- MIDTRANS CHECKOUT -->
     <script>
-        document.getElementById('btn-checkout-cart')?.addEventListener('click', async function () {
+        // Logika update kuantitas Ajax / Frontend
+        function updateCartQty(itemId, change) {
+            const qtyDisplay = document.getElementById('display-qty-' + itemId);
+            let currentQty = parseInt(qtyDisplay.innerText);
+            let newQty = currentQty + change;
+            if (newQty < 1) return;
 
-            try {
+            qtyDisplay.innerText = newQty;
+            // Di sini kamu bisa menyuntikkan fungsi Fetch/Axios API untuk meng-update record qty di database kamu!
+        }
 
-                const response = await fetch("{{ route('customer.payment.initiate') }}", {
-                    method: 'POST',
+        function deleteCartItem(itemId) {
+            if(confirm('Hapus item ini dari keranjang?')) {
+                document.getElementById('cart-item-' + itemId).remove();
+                // Di sini masukkan request API delete item keranjang kamu
+            }
+        }
 
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
+        // ==========================================
+        // LOGIKA INTEGRASI CHECKOUT CART MIDTRANS
+        // ==========================================
+        const btnCheckoutCart = document.getElementById('btn-checkout-cart');
+        if (btnCheckoutCart) {
+            btnCheckoutCart.addEventListener('click', async function() {
+                const originalHTML = this.innerHTML;
+                this.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menghubungkan Midtrans...';
+                this.disabled = true;
 
-                    body: JSON.stringify({})
-                });
+                try {
+                    // Panggil route initiate payment grosir/banyak barang milikmu
+                    const res = await fetch("{{ route('customer.payment.initiate') }}", {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        },
+                        body: JSON.stringify({ is_cart: true })
+                    });
+                    const data = await res.json();
 
-                const data = await response.json();
-
-                if (data.status === 'success') {
-
-                    window.snap.pay(data.snap_token, {
-
-                        onSuccess: async function(result) {
-                                // 1. Kirim laporan sukses ke database kita secara diam-diam
+                    if (data.status === 'success') {
+                        window.snap.pay(data.snap_token, {
+                            onSuccess: async (result) => {
                                 await fetch("{{ route('customer.payment.update-status') }}", {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                                     },
-                                    body: JSON.stringify({ 
-                                        order_id: result.order_id,
-                                        transaction_status: result.transaction_status
-                                    })
+                                    body: JSON.stringify({ order_id: result.order_id, transaction_status: result.transaction_status })
                                 });
-
-                                // 2. Munculkan notif dan pindah halaman
-                                alert("Pembayaran Berhasil! Pesanan sedang diproses.");
-                                window.location.href = "/customer/transactions"; // Langsung arahkan ke halaman riwayat
-
-                        onPending: function(result) {
-                            alert("Pesanan disimpan, segera selesaikan pembayaran!");
-                        },
-
-                        onError: function(result) {
-                            alert("Gagal memproses pembayaran keranjang.");
-                        }
-                    });
-
-                } else {
-
-                    alert(data.message);
+                                window.location.href = "/customer/transactions";
+                            },
+                            onPending: () => alert("Selesaikan pembayaran tagihan Anda!"),
+                            onError:   () => alert("Transaksi Gagal Di-proses!")
+                        });
+                    } else {
+                        alert(data.message || 'Gagal memuat Snap Token.');
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Koneksi server terputus.");
+                } finally {
+                    this.innerHTML = originalHTML;
+                    this.disabled = false;
                 }
-
-            } catch (error) {
-
-                console.error(error);
-
-                alert("Terjadi masalah saat menghubungkan ke sistem pembayaran.");
-            }
-        });
+            });
+        }
     </script>
-
 </body>
 </html>
-
