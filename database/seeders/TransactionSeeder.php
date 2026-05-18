@@ -57,5 +57,6 @@ class TransactionSeeder extends Seeder
             'qty' => 1,
             'price' => $products[2]->prices->first()->price ?? 0
         ]);
+
     }
-}
+}   
